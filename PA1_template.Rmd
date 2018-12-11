@@ -1,25 +1,134 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
+output:
   html_document:
     keep_md: true
 ---
 
 
 ## Loading and preprocessing the data
-
+### First we shall check if the file exists.
+```{r LoadAndPreprocess, echo=TRUE}
+if (!file.exists("activity/activity.csv")) {
+        print("activity csv does not exist")
+}
+df <- read.csv("activity/activity.csv", stringsAsFactors = FALSE)
+df$date <- as.Date(df$date, "%Y-%m-%d")
+summary(df)
+str(df)
+head(df)
+```
 
 
 ## What is mean total number of steps taken per day?
+### We will perform the sum using the aggregate function
+### Next will calculate the mean and median
+```{r totalSteps, echo=TRUE}
+library(dplyr)
+library(ggplot2)
+# Q 1.1
+steps <- aggregate(df$steps,by = list(df$date), FUN = "sum")
+colnames(steps) <- c("date","totalSteps")
+steps
+```
+### The histogram below shows the frequency of total number of steps between 10000 and 15000 is more than 25 times in the two months
+```{r hist, echo = TRUE}
+# Q 1.2
+steps$row <- rownames(steps)
+steps$row <- as.numeric(steps$row)
+hist(steps$totalSteps, main = "Histogram of total steps", xlab = "Total Steps")
+
+# Q 1.3
+mean(steps$totalSteps, na.rm = TRUE);median(steps$totalSteps, na.rm = TRUE)
+
+```
+
 
 
 
 ## What is the average daily activity pattern?
+### The average daily pattern below shows that the activity seems to be high around the interval 835( 8:00 - 9:00 am) minutes
+```{r averageDaily, echo = TRUE}
+stepsInterval <- group_by(df,interval) %>% summarise(avgSteps = mean(steps, na.rm = TRUE))
+plot(stepsInterval$interval, stepsInterval$avgSteps, type="l", xlab= "Interval", ylab= "Avg steps for the interval for all days", main = "Average Steps per 5 minute interval for all days")
+stepsInterval[which(stepsInterval$avgSteps==max(stepsInterval$avgSteps)), "interval"]
+
+```
 
 
 
 ## Imputing missing values
+### There are around 2304 values missing and shown as NAs
+```{r checkMissingValues, echo = TRUE}
+length(which(is.na(df)))
+dfNew <- df
+naRows <- which(is.na(df[,1]))
+length(naRows)
+```
+
+### Substituting the missing values with the average steps during that 5 minute interval
+```{r imputeValues}
+for(i in 1 : length(naRows))
+{
+        k <- naRows[i]
+        if(is.na(dfNew[k, 1]))
+           {
+        dfNew[k, "steps"] <- stepsInterval[which(stepsInterval[, "interval"]==dfNew[k, "interval"]), "avgSteps"]
+        }
+}
+head(dfNew)
+```
+
+### Drawing a histogram with the imputed values shows that the frequency of the number of steps between 10000 and 15000 is 35
+### The mean and median have also significantly increased
+```{r}
+stepsNew <- aggregate(dfNew$steps,by = list(dfNew$date), FUN = "sum")
+colnames(stepsNew) <- c("date","totalSteps")
+stepsNew
+stepsNew$row <- rownames(stepsNew)
+stepsNew$row <- as.numeric(stepsNew$row)
+hist(stepsNew$totalSteps, main = "Histogram of total steps(by imputing missing data)", xlab = "Total steps", ylab = "Frequency")
+mean(stepsNew$totalSteps, na.rm = TRUE);median(stepsNew$totalSteps, na.rm = TRUE)
+```
 
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+### Yes, the time series plot below shows the average steps in the 5 minute interval are higher in the weekend than on weekdays. The imputed data is used for these calculations
+```{r activityPatterns, echo=TRUE}
+library(timeDate)
+getIsWeekendString <- function(x)
+{
+    if(isWeekday(x, wday=1:5))
+    {
+            return("weekday");
+    }else
+    {
+            return("weekend");
+    }
+}
+dfNew$dow <- as.factor(sapply(dfNew$date, getIsWeekendString))
+
+par(mfrow=c(2,1))
+
+dfNewWkday <- dfNew[which(dfNew$dow=="weekday"), ]
+dfNewWkend <- dfNew[which(dfNew$dow=="weekend"), ]
+
+stepsIntWkday <- group_by(dfNewWkday,interval) %>% summarise(avgSteps = mean(steps, na.rm = TRUE))
+stepsIntWkend <- group_by(dfNewWkend,interval) %>% summarise(avgSteps = mean(steps, na.rm = TRUE))
+
+stepsIntWkday$dow <- "weekday"
+stepsIntWkend$dow <- "weekend"
+stepsInt <- rbind(stepsIntWkday, stepsIntWkend)
+stepsInt$dow <- as.factor(stepsInt$dow)
+
+library(lattice)
+xyplot(avgSteps~interval| dow,
+       data = stepsInt,
+       type = "l",
+       layout=c(1,2)
+      )
+```
+
+
+
